@@ -244,9 +244,11 @@ project: sample-project
 
 1. Edit/Write/MultiEdit 완료 후 발동
 2. Hook 스크립트가 `POST /validate_code {cwd, file_path, new_string, full_code}` 전송
-3. 서버가 rules 로드 후 Claude API로 위반 검증
+3. **서버가 서버 자체의 ANTHROPIC_API_KEY로 Claude API를 별도 호출**하여 위반 검증
+   - 사용자의 Claude Code 세션과 독립적인 2차 검증 (심판 역할)
+   - 사용자 Claude가 규칙을 무시해도 서버 쪽에서 잡아낼 수 있음
 4. 위반 발견 시 경고 출력 (exit 0 - 사용자가 직접 판단)
-5. **현재**: ANTHROPIC_API_KEY 없으면 동작 안 함
+5. **현재**: 서버에 ANTHROPIC_API_KEY 없으면 동작 안 함 (API 비용 별도 발생)
 
 ### API 엔드포인트
 
