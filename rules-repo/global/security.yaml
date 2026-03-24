@@ -1,0 +1,16 @@
+rules:
+  - id: sec-001
+    description: "비밀번호는 반드시 bcrypt로 해싱할 것 (plain text 저장 금지)"
+    severity: error
+  - id: sec-002
+    description: "JWT 토큰 만료는 24시간 이하로 설정할 것"
+    severity: error
+  - id: sec-003
+    description: "raw SQL query 금지, ORM만 사용할 것"
+    severity: error
+  - id: sec-004
+    description: "API 키, 비밀번호 등 민감한 정보는 하드코딩 금지, 환경변수로 관리할 것"
+    severity: error
+  - id: sec-005
+    description: "외부 입력값은 반드시 검증 후 사용할 것 (SQL injection, XSS 방지)"
+    severity: error

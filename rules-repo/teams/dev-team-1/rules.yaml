@@ -1,0 +1,13 @@
+rules:
+  - id: team-001
+    description: "모든 API 엔드포인트는 인증 미들웨어를 거쳐야 함"
+    severity: error
+  - id: team-002
+    description: "로깅은 반드시 structlog 사용"
+    severity: warning
+  - id: team-003
+    description: "에러 처리는 반드시 try/except로 감싸고 로그를 남길 것"
+    severity: error
+  - id: team-004
+    description: "API 응답은 반드시 표준 포맷 사용 {success: bool, data: any, message: str}"
+    severity: error

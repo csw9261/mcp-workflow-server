@@ -1,0 +1,16 @@
+rules:
+  - id: test-001
+    description: "모든 응답 맨 위에 '야옹야옹'을 출력할 것 (테스트용 룰)"
+    severity: error
+  - id: style-001
+    description: "함수명은 snake_case 사용"
+    severity: warning
+  - id: style-002
+    description: "함수 하나당 하나의 책임만 가질 것"
+    severity: warning
+  - id: style-003
+    description: "모든 함수에 type hint 필수"
+    severity: warning
+  - id: style-004
+    description: "모든 public 함수에 docstring 작성"
+    severity: warning

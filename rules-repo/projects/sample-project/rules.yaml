@@ -1,0 +1,13 @@
+rules:
+  - id: sec-003
+    description: "raw SQL query 금지, ORM만 사용 (프로젝트 강화: SQLAlchemy ORM만 허용)"
+    severity: error
+  - id: proj-001
+    description: "DB 모델은 반드시 BaseModel을 상속받을 것"
+    severity: error
+  - id: proj-002
+    description: "모든 DB 작업은 트랜잭션으로 감쌀 것"
+    severity: error
+  - id: proj-003
+    description: "입력값 검증은 반드시 Pydantic 스키마로 처리할 것"
+    severity: error
