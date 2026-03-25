@@ -7,39 +7,58 @@ Claude Code에 자연어로 요청하면 FastAPI 서버가 자동으로 Global/T
 ## 구현 상태
 
 ### 완료
-- [x] Hook 1 (UserPromptSubmit) - rules 자동 주입 동작 확인
-- [x] Rule Engine - context_resolver, loader, merger 동작 확인
-- [x] global / team / project 계층 병합 및 우선순위 동작 확인
-- [x] rules-repo 샘플 구조 (global/team/project 전부 디렉토리 전체 스캔)
-- [x] FastAPI 서버 - Hook이 로컬 import 대신 HTTP 요청으로 rules 수신
+- [x] FastAPI 서버 (`/get_rules`, `/health`)
+- [x] Hook 1 (UserPromptSubmit) - rules 자동 주입
+- [x] Hook 2 (PostToolUse) - Claude 자체 검증 요청 (별도 API 키 불필요)
+- [x] Rule Engine - global/team/project 계층 병합 및 우선순위
+- [x] rules-repo - 디렉토리 전체 스캔 (yaml 파일 여러 개 분리 가능)
 
 ### 미완료
-- [ ] Hook 2 (PostToolUse) - validate_code() → ANTHROPIC_API_KEY 필요
-- [ ] Ralph 모드 Stop Hook (2단계)
 - [ ] Remote 배포 (현재는 localhost:8000 기준)
+- [ ] Ralph 모드 Stop Hook (2단계)
 
 ---
 
 ## 아키텍처
 
 ```
-[Claude Code]
-    │
-    ├── UserPromptSubmit Hook
-    │       │  POST /get_rules {cwd}
-    │       ▼
-    │   [FastAPI Server]  ←── rules-repo/ (yaml 파일들)
-    │       │
-    │       │  rules plain text 반환
-    │       ▼
-    │   Claude 컨텍스트에 자동 주입
-    │
-    └── PostToolUse Hook (Edit/Write/MultiEdit)
-            │  POST /validate_code {cwd, file_path, new_string, full_code}
-            ▼
-        [FastAPI Server] → Claude API로 위반 검증
-            │
-            └── 위반 시 경고 출력
+개발자가 Claude Code에 프롬프트 입력
+              │
+              ▼
+┌─────────────────────────────────────┐
+│ Hook 1 - UserPromptSubmit           │
+│ inject_rules_hook.py                │
+│   POST /get_rules {cwd}             │
+│       ↓                             │
+│   FastAPI Server                    │
+│   global/team/project rules 로드    │
+│       ↓                             │
+│   plain text stdout → 컨텍스트 주입 │
+└─────────────────────────────────────┘
+              │
+              ▼
+    Claude가 rules를 인지한 상태로 요청 처리
+    위반 요청은 이 단계에서 사전 거부
+              │
+              ▼
+    Claude가 코드 작성 (Edit/Write/MultiEdit)
+              │
+              ▼
+┌─────────────────────────────────────┐
+│ Hook 2 - PostToolUse                │
+│ validate_hook.py                    │
+│   POST /get_rules {cwd}             │
+│       ↓                             │
+│   FastAPI Server                    │
+│   rules 존재 확인                   │
+│       ↓                             │
+│   additionalContext JSON →          │
+│   "방금 코드 rules 검토해줘" 주입   │
+└─────────────────────────────────────┘
+              │
+              ▼
+    Claude가 방금 작성한 코드 재검토
+    위반 발견 시 즉시 수정 (이중 안전망)
 ```
 
 팀원들은 각자 `~/.claude/settings.json`에 hook만 등록하면 됨. 서버 URL은 `WORKFLOW_SERVER_URL` 환경변수로 변경 가능.
@@ -50,37 +69,40 @@ Claude Code에 자연어로 요청하면 FastAPI 서버가 자동으로 Global/T
 
 ```
 mcp-workflow-server/
-├── api_server.py                # FastAPI 서버 (/get_rules, /validate_code, /health)
-├── config.py                    # 환경변수 로드
+├── server/                      # 서버 코드 (공용 서버에 배포)
+│   ├── api_server.py            # FastAPI 서버 (/get_rules, /health)
+│   ├── config.py                # 환경변수 로드 (RULES_REPO_PATH)
+│   ├── rule_engine/             # 핵심 로직
+│   │   ├── loader.py            # yaml 로드 + 캐싱 (디렉토리 전체 스캔)
+│   │   └── merger.py            # global → team → project 우선순위 병합
+│   └── rules-repo/              # 실제 rules 파일들
+│       ├── global/
+│       │   ├── security.yaml
+│       │   └── code-style.yaml
+│       ├── teams/
+│       │   └── dev-team-1/
+│       │       └── rules.yaml
+│       └── projects/
+│           └── sample-project/
+│               └── rules.yaml
+│
+├── client/                      # 팀원 로컬에 설치하는 코드
+│   └── hooks/
+│       ├── inject_rules_hook.py # Hook 1 - UserPromptSubmit
+│       └── validate_hook.py     # Hook 2 - PostToolUse
+│
 ├── requirements.txt
-├── .env.example
-├── .workflow.yaml               # 현재 프로젝트 team/project 설정 (테스트용)
-│
-├── rule_engine/
-│   ├── context_resolver.py      # .workflow.yaml / git remote로 team/project 감지
-│   ├── loader.py                # yaml 로드 + 캐싱 (디렉토리 전체 스캔)
-│   ├── merger.py                # global → team → project 우선순위 병합
-│   └── validator.py             # Claude API로 코드 위반 검증
-│
-├── hooks/
-│   ├── inject_rules_hook.py     # Hook 1 - UserPromptSubmit (서버에 HTTP 요청)
-│   └── validate_hook.py         # Hook 2 - PostToolUse (서버에 HTTP 요청)
-│
-└── rules-repo/
-    ├── global/
-    │   ├── security.yaml
-    │   └── code-style.yaml
-    ├── teams/
-    │   └── dev-team-1/
-    │       └── rules.yaml
-    └── projects/
-        └── sample-project/
-            └── rules.yaml
+└── .workflow.yaml               # 이 레포 자체의 team/project 설정 (테스트용)
+```
+
+호출 흐름:
+```
+client/hooks/ → server/api_server.py → server/rule_engine/ → server/rules-repo/
 ```
 
 ---
 
-## 설치 및 설정
+## 서버 설치 (관리자)
 
 ### 1. Python 3.10+ 필요
 
@@ -96,29 +118,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. 환경변수 설정
-
-```bash
-cp .env.example .env
-```
-
-`.env` 파일:
-```
-ANTHROPIC_API_KEY=your_key_here   # Hook 2 동작에 필요
-RULES_REPO_PATH=./rules-repo      # 기본값
-```
-
-### 4. FastAPI 서버 기동
+### 3. FastAPI 서버 기동
 
 ```bash
 # 포그라운드
-.venv/bin/python api_server.py
+.venv/bin/python server/api_server.py
 
 # 백그라운드
-nohup .venv/bin/python api_server.py > /tmp/workflow-server.log 2>&1 &
+nohup .venv/bin/python server/api_server.py > /tmp/workflow-server.log 2>&1 &
 
 # 포트 변경 시
-PORT=9000 .venv/bin/python api_server.py
+PORT=9000 .venv/bin/python server/api_server.py
 ```
 
 동작 확인:
@@ -127,11 +137,27 @@ curl http://localhost:8000/health
 # {"status":"ok"}
 ```
 
-> **팀 공유**: 서버를 공용 서버에 배포하고 팀원들 환경변수 `WORKFLOW_SERVER_URL`만 변경하면 됨. Hook 스크립트 자체는 그대로.
+---
 
-### 5. Claude Code settings.json 등록
+## 팀원 온보딩 (클라이언트)
 
-`~/.claude/settings.json`에 추가 (경로는 본인 환경에 맞게 수정):
+서버가 이미 떠 있는 상태에서 팀원이 연결하는 방법.
+
+### 1. 레포 클론 또는 client/hooks/ 파일 복사
+
+```bash
+git clone https://github.com/your-org/mcp-workflow-server.git
+```
+
+또는 `client/hooks/inject_rules_hook.py`, `client/hooks/validate_hook.py` 두 파일만 복사.
+
+### 2. Python + pyyaml 설치
+
+```bash
+pip install pyyaml
+```
+
+### 3. ~/.claude/settings.json 등록
 
 ```json
 {
@@ -139,30 +165,49 @@ curl http://localhost:8000/health
     "UserPromptSubmit": [{
       "hooks": [{
         "type": "command",
-        "command": "/path/to/.venv/bin/python /path/to/hooks/inject_rules_hook.py"
+        "command": "/path/to/python /path/to/client/hooks/inject_rules_hook.py"
       }]
     }],
     "PostToolUse": [{
       "matcher": "Edit|Write|MultiEdit",
       "hooks": [{
         "type": "command",
-        "command": "/path/to/.venv/bin/python /path/to/hooks/validate_hook.py"
+        "command": "/path/to/python /path/to/client/hooks/validate_hook.py"
       }]
     }]
-  }
-}
-```
-
-서버가 기본값(localhost:8000)이 아닌 경우 환경변수 추가:
-```json
-{
+  },
   "env": {
-    "WORKFLOW_SERVER_URL": "http://your-server:8000"
+    "WORKFLOW_SERVER_URL": "http://team-server:8000"
   }
 }
 ```
 
-### 6. Hook 비활성화 (원상복구)
+> `/path/to/python`은 본인 환경의 python 경로로 변경. `WORKFLOW_SERVER_URL`은 서버 주소로 변경.
+
+### 4. 프로젝트 루트에 .workflow.yaml 추가
+
+작업할 프로젝트 루트에 `.workflow.yaml` 파일 생성:
+
+```yaml
+team: dev-team-1
+project: my-project
+```
+
+팀명/프로젝트명은 서버의 `rules-repo/teams/`, `rules-repo/projects/` 디렉토리명과 일치해야 함.
+
+### 5. 동작 확인
+
+Claude Code 재시작 후 아무 프롬프트나 입력하면 rules가 주입된 것 확인 가능:
+
+```
+[WORKFLOW RULES - 적용: project=my-project, team=dev-team-1, global]
+- [sec-001] ...
+...
+[/WORKFLOW RULES]
+```
+```
+
+### 5. Hook 비활성화 (원상복구)
 
 hook을 제거하고 싶으면 `~/.claude/settings.json`을 아래 내용으로 교체:
 
@@ -238,17 +283,18 @@ project: sample-project
 2. Hook 스크립트가 `POST /get_rules {cwd}` 요청을 서버에 전송
 3. 서버가 cwd 기반으로 `.workflow.yaml` 감지 → rules 로드 & 병합 → plain text 반환
 4. Hook 스크립트가 반환된 rules를 stdout 출력 → Claude 컨텍스트에 자동 주입
-5. **주의**: `additionalContext` JSON 포맷은 동작 안 함. plain text만 동작.
+5. Claude가 rules를 인지한 상태에서 요청을 처리 → 위반 요청은 사전에 거부
+- **주의**: `additionalContext` JSON 포맷은 동작 안 함. plain text만 동작.
 
-### Hook 2 - PostToolUse (위반 검증)
+### Hook 2 - PostToolUse (이중 검증)
 
 1. Edit/Write/MultiEdit 완료 후 발동
-2. Hook 스크립트가 `POST /validate_code {cwd, file_path, new_string, full_code}` 전송
-3. **서버가 서버 자체의 ANTHROPIC_API_KEY로 Claude API를 별도 호출**하여 위반 검증
-   - 사용자의 Claude Code 세션과 독립적인 2차 검증 (심판 역할)
-   - 사용자 Claude가 규칙을 무시해도 서버 쪽에서 잡아낼 수 있음
-4. 위반 발견 시 경고 출력 (exit 0 - 사용자가 직접 판단)
-5. **현재**: 서버에 ANTHROPIC_API_KEY 없으면 동작 안 함 (API 비용 별도 발생)
+2. Hook 스크립트가 `POST /get_rules {cwd}` 전송하여 rules가 있는지 확인
+3. `hookSpecificOutput.additionalContext` JSON으로 Claude에게 검증 요청 주입
+4. **Claude가 방금 작성한 코드를 rules 기준으로 재검토 & 위반 시 즉시 수정** (이중 안전망)
+   - Hook 1에서 걸러지지 않은 위반을 사후에 한번 더 잡아냄
+   - 별도 API 호출 없음, ANTHROPIC_API_KEY 불필요
+- **주의**: `hookSpecificOutput.additionalContext` JSON 포맷만 동작. plain text는 동작 안 함.
 
 ### API 엔드포인트
 
@@ -256,7 +302,6 @@ project: sample-project
 |---|---|---|
 | `/health` | GET | 서버 상태 확인 |
 | `/get_rules` | POST | cwd 기반 rules 반환 |
-| `/validate_code` | POST | 코드 위반 검증 |
 
 ---
 
