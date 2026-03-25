@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Hook 1 - UserPromptSubmit
-FastAPI 서버에 cwd를 보내 rules를 받아 프롬프트 앞에 자동 주입.
+로컬에서 .workflow.yaml을 읽어 team/project를 추출하고 서버에 전송.
 """
 import json
 import os
@@ -9,14 +9,40 @@ import sys
 import urllib.request
 import urllib.error
 
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
 SERVER_URL = os.environ.get("WORKFLOW_SERVER_URL", "http://localhost:8000")
+
+
+def read_workflow_yaml(cwd: str) -> dict:
+    """로컬 .workflow.yaml에서 team/project 추출"""
+    if yaml is None:
+        return {}
+    workflow_path = os.path.join(cwd, ".workflow.yaml")
+    if not os.path.exists(workflow_path):
+        return {}
+    with open(workflow_path) as f:
+        config = yaml.safe_load(f) or {}
+    return {
+        "team": config.get("team"),
+        "project": config.get("project"),
+    }
 
 
 def main():
     data = json.load(sys.stdin)
     cwd = data.get("cwd", os.getcwd())
 
-    payload = json.dumps({"cwd": cwd}).encode()
+    context = read_workflow_yaml(cwd)
+
+    payload = json.dumps({
+        "team": context.get("team"),
+        "project": context.get("project"),
+    }).encode()
+
     req = urllib.request.Request(
         f"{SERVER_URL}/get_rules",
         data=payload,
