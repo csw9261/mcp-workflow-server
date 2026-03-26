@@ -14,8 +14,10 @@ Claude Code에 자연어로 요청하면 FastAPI 서버가 자동으로 Global/T
 - [x] rules-repo - 디렉토리 전체 스캔 (yaml 파일 여러 개 분리 가능)
 
 ### 미완료
-- [ ] Remote 배포 (현재는 localhost:8000 기준)
+- [ ] 전용 서버 배포 (현재는 ngrok으로 외부 접속 가능)
 - [ ] Ralph 모드 Stop Hook (2단계)
+
+> Hook 2 (PostToolUse) `hookSpecificOutput.additionalContext` 동작 확인 완료 (별도 API 키 불필요)
 
 ---
 
@@ -128,12 +130,12 @@ pip install -r requirements.txt
 nohup .venv/bin/python server/api_server.py > /tmp/workflow-server.log 2>&1 &
 
 # 포트 변경 시
-PORT=9000 .venv/bin/python server/api_server.py
+PORT=27842 .venv/bin/python server/api_server.py
 ```
 
 동작 확인:
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:27842/health
 # {"status":"ok"}
 ```
 
@@ -151,13 +153,9 @@ git clone https://github.com/your-org/mcp-workflow-server.git
 
 또는 `client/hooks/inject_rules_hook.py`, `client/hooks/validate_hook.py` 두 파일만 복사.
 
-### 2. Python + pyyaml 설치
+> hook 파일은 표준 라이브러리만 사용하므로 별도 패키지 설치 불필요.
 
-```bash
-pip install pyyaml
-```
-
-### 3. ~/.claude/settings.json 등록
+### 2. ~/.claude/settings.json 등록
 
 ```json
 {
@@ -177,7 +175,7 @@ pip install pyyaml
     }]
   },
   "env": {
-    "WORKFLOW_SERVER_URL": "http://team-server:8000"
+    "WORKFLOW_SERVER_URL": "http://team-server:27842"
   }
 }
 ```
@@ -322,6 +320,5 @@ project: sample-project
 
 ## 다음 단계
 
-1. **Hook 2 테스트** - ANTHROPIC_API_KEY 발급 후 validate_code() 동작 확인
-2. **Remote 배포** - 공용 서버에 배포, 팀원들 WORKFLOW_SERVER_URL 설정
-3. **Ralph 모드** - Stop Hook 연동 (2단계)
+1. **전용 서버 배포** - Oracle Cloud 등 공용 서버에 배포, 고정 URL 운영
+2. **Ralph 모드** - Stop Hook 연동 (2단계)
