@@ -45,6 +45,29 @@ SERVER_URL = os.environ.get("WORKFLOW_SERVER_URL", "http://192.168.214.152:27842
 WORKFLOW_MODE = os.environ.get("WORKFLOW_MODE", "interactive")
 
 
+def find_workflow_yaml(cwd: str) -> dict:
+    """cwd에서 상위 디렉토리까지 탐색하여 .workflow.yaml의 team/project 반환"""
+    path = cwd
+    while True:
+        candidate = os.path.join(path, ".workflow.yaml")
+        if os.path.exists(candidate):
+            try:
+                with open(candidate) as f:
+                    config = {}
+                    for line in f:
+                        line = line.strip()
+                        if ":" in line:
+                            k, v = line.split(":", 1)
+                            config[k.strip()] = v.strip()
+                return config
+            except Exception:
+                return {}
+        parent = os.path.dirname(path)
+        if parent == path:  # 루트 도달
+            return {}
+        path = parent
+
+
 def main() -> None:
     """PostToolUse hook 진입점 - 코드 작성 후 Claude에게 rules 검증 요청"""
     # off 모드면 즉시 종료 (rules 검증 스킵)
@@ -64,8 +87,13 @@ def main() -> None:
     if not file_path or not new_string:
         sys.exit(0)
 
-    # 서버에 cwd 전송 → rules 존재 여부 확인
-    payload = json.dumps({"cwd": cwd}).encode()
+    # cwd에서 상위 디렉토리까지 .workflow.yaml 탐색 → team/project 추출
+    workflow = find_workflow_yaml(cwd)
+    team = workflow.get("team")
+    project = workflow.get("project")
+
+    # 서버에 team/project 전송 → rules 존재 여부 확인
+    payload = json.dumps({"team": team, "project": project}).encode()
 
     req = urllib.request.Request(
         f"{SERVER_URL}/get_rules",

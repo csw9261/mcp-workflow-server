@@ -1,6 +1,6 @@
 rules:
   - id: test-001
-    description: "모든 응답 맨 위에 '야옹야옹'을 출력할 것 (테스트용 룰)"
+    description: "모든 응답 맨 위에 현재 적용된 룰에 대해 [WORKFLOW RULES - 적용: project=OOO, team=XXX] 형식으로 출력할 것 (테스트용 룰)"
     severity: error
   - id: style-001
     description: "함수명은 snake_case 사용"

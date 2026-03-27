@@ -36,14 +36,44 @@ import urllib.error
 SERVER_URL = os.environ.get("WORKFLOW_SERVER_URL", "http://192.168.214.152:27842")
 
 
+def find_workflow_yaml(cwd: str) -> dict:
+    """cwd에서 상위 디렉토리까지 탐색하여 .workflow.yaml의 team/project 반환"""
+    path = cwd
+    while True:
+        candidate = os.path.join(path, ".workflow.yaml")
+        if os.path.exists(candidate):
+            import json as _json
+            try:
+                with open(candidate) as f:
+                    # yaml 파싱 (표준 라이브러리로 단순 처리)
+                    config = {}
+                    for line in f:
+                        line = line.strip()
+                        if ":" in line:
+                            k, v = line.split(":", 1)
+                            config[k.strip()] = v.strip()
+                return config
+            except Exception:
+                return {}
+        parent = os.path.dirname(path)
+        if parent == path:  # 루트 도달
+            return {}
+        path = parent
+
+
 def main() -> None:
     """UserPromptSubmit hook 진입점 - rules를 서버에서 받아 Claude 컨텍스트에 주입"""
     # Claude Code가 stdin으로 전달하는 JSON (cwd, session_id 등 포함)
     data = json.load(sys.stdin)
     cwd = data.get("cwd", os.getcwd())
 
-    # 서버에 cwd 전송 → 서버가 .workflow.yaml 읽어서 team/project 감지
-    payload = json.dumps({"cwd": cwd}).encode()
+    # cwd에서 상위 디렉토리까지 .workflow.yaml 탐색 → team/project 추출
+    workflow = find_workflow_yaml(cwd)
+    team = workflow.get("team")
+    project = workflow.get("project")
+
+    # 서버에 team/project 전송
+    payload = json.dumps({"team": team, "project": project}).encode()
 
     req = urllib.request.Request(
         f"{SERVER_URL}/get_rules",
