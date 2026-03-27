@@ -30,7 +30,8 @@ Claude Code에 자연어로 요청하면 FastAPI 서버가 자동으로 Global/T
 ┌─────────────────────────────────────┐
 │ Hook 1 - UserPromptSubmit           │
 │ inject_rules_hook.py                │
-│   POST /get_rules {cwd}             │
+│   .workflow.yaml 탐색 (상위 탐색)   │
+│   POST /get_rules {team, project}   │
 │       ↓                             │
 │   FastAPI Server                    │
 │   global/team/project rules 로드    │
@@ -49,7 +50,8 @@ Claude Code에 자연어로 요청하면 FastAPI 서버가 자동으로 Global/T
 ┌─────────────────────────────────────┐
 │ Hook 2 - PostToolUse                │
 │ validate_hook.py                    │
-│   POST /get_rules {cwd}             │
+│   .workflow.yaml 탐색 (상위 탐색)   │
+│   POST /get_rules {team, project}   │
 │       ↓                             │
 │   FastAPI Server                    │
 │   rules 존재 확인                   │
@@ -182,7 +184,7 @@ git clone https://github.com/your-org/mcp-workflow-server.git
 
 > `/path/to/python`은 본인 환경의 python 경로로 변경. `WORKFLOW_SERVER_URL`은 서버 주소로 변경.
 
-### 4. 프로젝트 루트에 .workflow.yaml 추가
+### 3. 프로젝트 루트에 .workflow.yaml 추가
 
 작업할 프로젝트 루트에 `.workflow.yaml` 파일 생성:
 
@@ -193,7 +195,7 @@ project: my-project
 
 팀명/프로젝트명은 서버의 `rules-repo/teams/`, `rules-repo/projects/` 디렉토리명과 일치해야 함.
 
-### 5. 동작 확인
+### 4. 동작 확인
 
 Claude Code 재시작 후 아무 프롬프트나 입력하면 rules가 주입된 것 확인 가능:
 
@@ -206,6 +208,7 @@ Claude Code 재시작 후 아무 프롬프트나 입력하면 rules가 주입된
 ```
 
 ### 5. Hook 비활성화 (원상복구)
+
 
 hook을 제거하고 싶으면 `~/.claude/settings.json`을 아래 내용으로 교체:
 
@@ -261,9 +264,10 @@ rules-repo/
 
 ### 팀/프로젝트 자동 감지 순서
 
-1. 프로젝트 루트의 `.workflow.yaml` ← team rules 적용하려면 필수
-2. git remote URL에서 project만 추출 (team 감지 불가)
-3. fallback → global rules만 적용
+클라이언트(hook)에서 감지 후 서버에 전송:
+
+1. cwd에서 상위 디렉토리까지 `.workflow.yaml` 탐색 ← team rules 적용하려면 필수
+2. fallback → global rules만 적용
 
 `.workflow.yaml` 예시:
 ```yaml
@@ -278,16 +282,18 @@ project: sample-project
 ### Hook 1 - UserPromptSubmit (rules 주입)
 
 1. 프롬프트 전송 시 자동 발동
-2. Hook 스크립트가 `POST /get_rules {cwd}` 요청을 서버에 전송
-3. 서버가 cwd 기반으로 `.workflow.yaml` 감지 → rules 로드 & 병합 → plain text 반환
-4. Hook 스크립트가 반환된 rules를 stdout 출력 → Claude 컨텍스트에 자동 주입
-5. Claude가 rules를 인지한 상태에서 요청을 처리 → 위반 요청은 사전에 거부
+2. Hook 스크립트가 cwd에서 상위 디렉토리까지 `.workflow.yaml` 탐색 → team/project 추출
+3. `POST /get_rules {team, project}` 요청을 서버에 전송
+4. 서버가 rules 로드 & 병합 → plain text 반환
+5. Hook 스크립트가 반환된 rules를 stdout 출력 → Claude 컨텍스트에 자동 주입
+6. Claude가 rules를 인지한 상태에서 요청을 처리 → 위반 요청은 사전에 거부
 - **주의**: `additionalContext` JSON 포맷은 동작 안 함. plain text만 동작.
 
 ### Hook 2 - PostToolUse (이중 검증)
 
 1. Edit/Write/MultiEdit 완료 후 발동
-2. Hook 스크립트가 `POST /get_rules {cwd}` 전송하여 rules가 있는지 확인
+2. Hook 스크립트가 cwd에서 상위 디렉토리까지 `.workflow.yaml` 탐색 → team/project 추출
+3. `POST /get_rules {team, project}` 전송하여 rules가 있는지 확인
 3. `hookSpecificOutput.additionalContext` JSON으로 Claude에게 검증 요청 주입
 4. **Claude가 방금 작성한 코드를 rules 기준으로 재검토 & 위반 시 즉시 수정** (이중 안전망)
    - Hook 1에서 걸러지지 않은 위반을 사후에 한번 더 잡아냄
@@ -299,7 +305,7 @@ project: sample-project
 | 엔드포인트 | 메서드 | 설명 |
 |---|---|---|
 | `/health` | GET | 서버 상태 확인 |
-| `/get_rules` | POST | cwd 기반 rules 반환 |
+| `/get_rules` | POST | team/project 기반 rules 반환 |
 
 ---
 
