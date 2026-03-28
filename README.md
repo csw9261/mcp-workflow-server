@@ -6,18 +6,15 @@ Claude Code에 자연어로 요청하면 FastAPI 서버가 자동으로 Global/T
 
 ## 구현 상태
 
-### 완료
 - [x] FastAPI 서버 (`/get_rules`, `/health`)
 - [x] Hook 1 (UserPromptSubmit) - rules 자동 주입
 - [x] Hook 2 (PostToolUse) - Claude 자체 검증 요청 (별도 API 키 불필요)
 - [x] Rule Engine - global/team/project 계층 병합 및 우선순위
 - [x] rules-repo - 디렉토리 전체 스캔 (yaml 파일 여러 개 분리 가능)
+- [x] Ralph 파이프라인 - `claude -p` 반복 실행 + Stop Hook 완료 판단
+- [x] WORKFLOW_MODE - interactive / ralph / off 모드 지원
 
-### 미완료
-- [ ] 전용 서버 배포 (현재는 ngrok으로 외부 접속 가능)
-- [ ] Ralph 모드 Stop Hook (2단계)
-
-> Hook 2 (PostToolUse) `hookSpecificOutput.additionalContext` 동작 확인 완료 (별도 API 키 불필요)
+> 서버는 ngrok으로 외부 접속 가능. `WORKFLOW_SERVER_URL` 환경변수로 서버 주소 변경.
 
 ---
 
@@ -324,7 +321,3 @@ project: sample-project
 
 ---
 
-## 다음 단계
-
-1. **전용 서버 배포** - Oracle Cloud 등 공용 서버에 배포, 고정 URL 운영
-2. **Ralph 모드** - Stop Hook 연동 (2단계)
